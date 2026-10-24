@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cameras - Login</title>
+  <style>
+    body { margin: 0; height: 100vh; display: flex; align-items: center; justify-content: center;
+           background: #111; color: #eee; font-family: sans-serif; }
+    form { display: flex; flex-direction: column; gap: 10px; width: 260px; }
+    input, button { padding: 10px; font-size: 16px; border-radius: 4px; border: 1px solid #444; }
+    input { background: #222; color: #eee; }
+    button { background: #2a6; color: #fff; border: none; cursor: pointer; }
+    .err { color: #f66; min-height: 1em; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <form method="POST" action="/login">
+    <h2>Cameras</h2>
+    <input name="user" placeholder="Username" autocomplete="username" required autofocus>
+    <input name="pass" type="password" placeholder="Password" autocomplete="current-password" required>
+    <button type="submit">Login</button>
+    <div class="err" id="err"></div>
+  </form>
+  <script>
+    const e = new URLSearchParams(location.search).get('e');
+    if (e === '1') err.textContent = 'Wrong username or password';
+    if (e === 'locked') err.textContent = 'Too many attempts, try again in 15 minutes';
+  </script>
+</body>
+</html>

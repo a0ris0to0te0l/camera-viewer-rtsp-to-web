@@ -1,0 +1,130 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cameras</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; background: #111; color: #eee; font-family: sans-serif; }
+    header { position: sticky; top: 0; z-index: 2; background: #111; display: flex; gap: 8px; align-items: center;
+             height: 52px; padding: 0 8px; padding-left: max(8px, env(safe-area-inset-left)); padding-right: max(8px, env(safe-area-inset-right)); }
+    header button { min-width: 44px; height: 38px; font-size: 16px; background: #222; color: #eee; border: 1px solid #444; border-radius: 6px; cursor: pointer; }
+    header button.active { background: #2a6; border-color: #2a6; }
+    header a { margin-left: auto; color: #aaa; padding: 10px 4px; }
+
+    /* Desktop / large screens: fill the viewport */
+    #grid { display: grid; gap: 4px; padding: 4px; height: calc(100vh - 52px); height: calc(100dvh - 52px); }
+    #grid.l1 { grid-template-columns: 1fr; }
+    #grid.l2 { grid-template-columns: 1fr 1fr; }
+    #grid.l4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+
+    .tile { position: relative; background: #000; min-height: 0; overflow: hidden; }
+    .tile video { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .tile select { position: absolute; top: 6px; left: 6px; z-index: 1; background: rgba(0,0,0,.6); color: #fff;
+                   border: 1px solid #555; border-radius: 4px; padding: 6px; font-size: 15px; }
+    .tile .fs { position: absolute; top: 6px; right: 6px; z-index: 1; width: 36px; height: 36px; font-size: 18px; line-height: 1;
+                background: rgba(0,0,0,.6); color: #fff; border: 1px solid #555; border-radius: 4px; cursor: pointer; }
+    .tile .status { position: absolute; bottom: 6px; left: 6px; font-size: 12px; color: #aaa; }
+
+    /* Phone portrait: stack tiles vertically, page scrolls */
+    @media (max-width: 700px) and (orientation: portrait) {
+      #grid, #grid.l1, #grid.l2, #grid.l4 { height: auto; grid-template-columns: 1fr; grid-template-rows: none; }
+      .tile { aspect-ratio: 4 / 3; }
+    }
+    /* Phone landscape: small header, side-by-side tiles fill the screen */
+    @media (max-height: 500px) and (orientation: landscape) {
+      header { height: 40px; }
+      header button { height: 30px; }
+      #grid { height: calc(100vh - 40px); height: calc(100dvh - 40px); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <span>View:</span>
+    <button data-layout="1">1</button>
+    <button data-layout="2">2</button>
+    <button data-layout="4">4</button>
+    <a href="/logout">Logout</a>
+  </header>
+  <div id="grid"></div>
+
+  <script>
+    const grid = document.getElementById('grid');
+    let players = [];
+    let selected = [1, 2, 3, 4]; // channel shown in each tile
+
+    function play(video, status, ch) {
+      const src = `/hls/ch${ch}/index.m3u8`;
+      status.textContent = 'Connecting...';
+      if (window.Hls && Hls.isSupported()) {
+        const hls = new Hls({
+          liveSyncDurationCount: 2,
+          manifestLoadingMaxRetry: 30,
+          manifestLoadingRetryDelay: 1000,
+        });
+        hls.loadSource(src);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => { status.textContent = ''; video.play().catch(() => {}); });
+        hls.on(Hls.Events.ERROR, (_, d) => {
+          if (!d.fatal) return;
+          status.textContent = 'Reconnecting...';
+          if (d.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
+          else setTimeout(() => { hls.loadSource(src); hls.startLoad(); }, 2000);
+        });
+        return () => hls.destroy();
+      }
+      // Safari / iOS: native HLS
+      video.src = src;
+      video.addEventListener('playing', () => status.textContent = '', { once: true });
+      video.play().catch(() => {});
+      return () => { video.removeAttribute('src'); video.load(); };
+    }
+
+    function render(layout) {
+      players.forEach((stop) => stop());
+      players = [];
+      grid.innerHTML = '';
+      grid.className = 'l' + layout;
+      document.querySelectorAll('header button').forEach((b) => b.classList.toggle('active', b.dataset.layout == layout));
+      localStorage.setItem('layout', layout);
+
+      for (let i = 0; i < layout; i++) {
+        const tile = document.createElement('div');
+        tile.className = 'tile';
+        const sel = document.createElement('select');
+        [1, 2, 3, 4].forEach((c) => sel.add(new Option('Camera ' + c, c)));
+        sel.value = selected[i];
+        const video = document.createElement('video');
+        video.muted = true; video.playsInline = true; video.autoplay = true;
+        const fs = document.createElement('button');
+        fs.className = 'fs'; fs.textContent = '⛶'; fs.title = 'Fullscreen';
+        const goFull = () => {
+          if (tile.requestFullscreen) tile.requestFullscreen();
+          else if (video.webkitEnterFullscreen) video.webkitEnterFullscreen(); // iPhone
+        };
+        fs.onclick = goFull;
+        video.ondblclick = goFull;
+        const status = document.createElement('div');
+        status.className = 'status';
+        tile.append(sel, fs, video, status);
+        grid.append(tile);
+
+        players[i] = play(video, status, selected[i]);
+        sel.onchange = () => {
+          selected[i] = Number(sel.value);
+          localStorage.setItem('selected', JSON.stringify(selected));
+          players[i]();
+          players[i] = play(video, status, selected[i]);
+        };
+      }
+    }
+
+    try { selected = JSON.parse(localStorage.getItem('selected')) || selected; } catch {}
+    document.querySelectorAll('header button').forEach((b) => b.onclick = () => render(Number(b.dataset.layout)));
+    render(Number(localStorage.getItem('layout')) || 4);
+  </script>
+</body>
+</html>
