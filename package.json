@@ -1,0 +1,8 @@
+{
+  "name": "camera-viewer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Login-protected live viewer for 4 RTSP camera channels (RTSP -> HLS via ffmpeg)",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" }
+}
